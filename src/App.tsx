@@ -30,8 +30,10 @@ import LintingModule from "@camunda/linting/modeler";
 import {
     CloudElementTemplatesPropertiesProviderModule,
     ElementTemplatesPropertiesProviderModule,
+    ElementTemplate,
     // @ts-ignore
 } from "bpmn-js-element-templates";
+import { getBusinessObject } from "bpmn-js/lib/util/ModelUtil";
 import {
     CreateAppendAnythingModule,
     CreateAppendElementTemplatesModule,
@@ -48,8 +50,8 @@ const additionalModules = [
     ElementTemplateChooserModule,
     ElementTemplatesIconsRenderer,
     LintingModule,
-    CreateAppendAnythingModule, // only partially works with Camunda 7
-    CreateAppendElementTemplatesModule, // only partially works with Camunda 7
+    CreateAppendAnythingModule, // 'mostly' works with Camunda 7
+    CreateAppendElementTemplatesModule, // 'mostly' works with Camunda 7
 
     ...(isCamunda8
         ? [
@@ -72,6 +74,10 @@ const elementTemplates = isCamunda8
     : elementTemplates7;
 
 const moddleExtensions = isCamunda8 ? { zeebe: ZeebeModdle } : undefined;
+
+const elementTemplateIconRenderer = {
+    iconProperty: isCamunda8 ? undefined : "camunda:modelerTemplateIcon",
+};
 
 function App() {
     const modeler = useRef<BpmnModeler7 | BpmnModeler8>();
@@ -96,7 +102,28 @@ function App() {
             additionalModules,
             moddleExtensions,
             elementTemplates,
+            elementTemplateIconRenderer,
         });
+
+        if (!isCamunda8) {
+            // inspired from https://github.com/bpmn-io/bpmn-js-element-templates/blob/4f13f75ac397274c48892748449d9a883d68ccde/src/provider/cloud-element-templates/create/TemplateElementFactory.js#L46
+            const elementFactory = modeler.current.get<any>("elementFactory");
+
+            modeler.current.get<any>("elementTemplates").createElement = (
+                template: ElementTemplate
+            ) => {    
+                const { appliesTo, id, icon } = template;
+                const type = appliesTo[0];
+                
+                const element = elementFactory.createShape({ type });
+                const businessObject = getBusinessObject(element);
+
+                businessObject.set("camunda:modelerTemplate", id);
+                businessObject.set("camunda:modelerTemplateIcon", icon.contents);
+
+                return element;
+            };
+        }
 
         modeler.current.createDiagram();
     });
